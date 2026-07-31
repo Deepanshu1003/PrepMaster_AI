@@ -1,7 +1,7 @@
 # PrepMaster AI 🎓💼🤖
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-19.0-61dafb.svg)](https://react.dev/)
+[![React](https://img.shields.io/badge/React-18.3-61dafb.svg)](https://react.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind--CSS-4.0-38bdf8.svg)](https://tailwindcss.com/)
 [![Express.js](https://img.shields.io/badge/Express-4.x-green.svg)](https://expressjs.com/)
 [![Gemini API](https://img.shields.io/badge/Google--Gemini-API-orange.svg)](https://ai.google.dev/)
@@ -40,13 +40,10 @@ PrepMaster AI delivers a dual-engine workspace, combining structured certificati
 *   **Side-by-Side Tutor Chat**: A dedicated AI chatbot attached directly to each study module for real-time code debugging and conceptual deep-dives.
 *   **10-Question MCQ Quizzes**: On-demand, topic-specific quizzes with full question-state persistence.
 
-### 4. Durable Cloud Persistence & Multi-Tenant Isolation
-*   **Production-Grade Firestore Integration**: Integrates directly with **Google Cloud Firestore**. Learning rooms, customized recruiter syllabi, notes, and quiz metrics are written directly to Firestore collections.
-*   **Zero-Downtime Local JSON Fallback**: If Firestore credentials are not set up or are unreachable, the server automatically degrades gracefully to a stateless local JSON fallback cache (`src/db.json`). This protects the app from crashing and ensures high availability.
-*   **Resilient Device ID Bridging**: Progress is securely isolated using a client-side Workspace ID (`deviceId`). Switching, pairing, or restoring workspaces across browsers and mobile phones is simple by copy-pasting the matching ID.
-*   **Development Phase vs. Production Phase Toggle**: 
-    *   **Development Phase (Sync Unlocked)**: Unlocks the workspace. Developers can manually enter custom Workspace IDs, select from active discovered workspace profiles queried dynamically from Cloud Firestore, or search & permanently cascade-delete old development profiles directly from the UI.
-    *   **Production Phase (Sync Locked)**: Lock down the workspace ID for tenant-level isolation and safety, protecting production workspaces from accidental sync overrides.
+### 4. Durable Cloud Persistence & Multi-Tenant Sync
+*   **Production-Grade Cloud Persistence**: Integrates directly with **Google Cloud Firestore**. Learning rooms, customized recruiter syllabi, notes, and quiz metrics are saved securely to Cloud Firestore.
+*   **Zero-Downtime Local Fallback**: Automatically degrades gracefully to a local storage cache if cloud credentials are absent or unreachable, ensuring high availability.
+*   **Seamless Workspace Sync**: Progress is securely isolated using a client-side Workspace ID (`deviceId`), making it effortless to restore or share study sessions across devices.
 
 ### 5. High-Availability & Dual-Theme Core
 *   **Zero-Downtime Redirection Shield**: Automatically routes queries to `gemini-3.1-flash-lite` if the primary `gemini-3.5-flash` model faces quota exhaustion or rate limits, isolating errors as clean system notifications.
@@ -152,4 +149,4 @@ Built with React 19, Express, TypeScript, Tailwind CSS, and the Google Gemini SD
 
 ---
 
-*Happy learning, and pass your certifications with confidence!* 🚀
+*Happy learning! Ace your certifications and master your interviews with confidence!* 🚀 💼
