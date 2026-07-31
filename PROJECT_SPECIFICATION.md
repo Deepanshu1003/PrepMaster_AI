@@ -54,47 +54,14 @@ To guarantee secure, isolated, and highly-stable study environments that remain 
 * **Zero-Overlap Isolation**: Both Firestore queries and local files filter records strictly by the device identifier, giving users their own private sandbox.
 
 ### B. Database Schema & Collections (`src/types.ts`)
-The database collections (Firestore) and local storage arrays are structured under strongly-typed TypeScript models:
+The persistent storage layers (Cloud Firestore and local storage fallback) follow strongly-typed entity schemas:
 
-```typescript
-// 1. Plan Model representing Certification Rooms
-export interface ExamPlan {
-  id: string;          // Cryptographic random UUID
-  name: string;        // E.g., "AWS Solutions Architect Associate"
-  created_at: string;  // ISO timestamp string
-  device_id: string;   // Device sandbox binding identifier
-}
-
-// 2. Question Model for Certification Rooms
-export interface Question {
-  id: string;               // Cryptographic random UUID
-  exam_plan_id: string;     // Foreign key pointing to ExamPlan
-  question_number: number;  // 1-indexed problem selector
-  question_text: string;    // Clean question body (no page numbers)
-  options: Record<string, string>; // Key-value map (e.g. {"A": "Val", "B": "Val"})
-  correct_answer?: string;  // Single character correct choice (e.g. "B")
-}
-
-// 3. User Attempt Model for tracking Certification responses
-export interface UserAttempt {
-  id: string;               // Cryptographic random UUID
-  question_id: string;      // Foreign key pointing to Question
-  device_id: string;        // Active device sandbox ownership
-  selected_answer: string;  // Choice letter submitted by user (e.g. "A")
-  is_correct: boolean;      // Evaluation outcome
-  explanation: string;      // Persistent AI evaluation text response
-  attempted_at: string;     // ISO timestamp string
-}
-
-// 4. Client Progress state compiling active status
-export interface ProgressItem {
-  question_id: string;
-  question_number: number;
-  status: 'green' | 'red' | 'gray'; // green = correct, red = incorrect, gray = incomplete
-  selected_answer?: string;         // The user's chosen options
-  explanation?: string;             // Saved AI response string
-}
-```
+| Entity | Key Fields | Field Types & Constraints | Purpose |
+| :--- | :--- | :--- | :--- |
+| **ExamPlan** | `id`, `name`, `created_at`, `device_id` | `UUID`, `string`, `ISO-8601`, `string` | Top-level certification practice session container bound to a workspace. |
+| **Question** | `id`, `exam_plan_id`, `question_number`, `question_text`, `options`, `correct_answer` | `UUID`, `FK(ExamPlan)`, `number`, `string`, `Record<string, string>`, `string` | Individual multiple-choice question problem statement and option choices. |
+| **UserAttempt** | `id`, `question_id`, `device_id`, `selected_answer`, `is_correct`, `explanation`, `attempted_at` | `UUID`, `FK(Question)`, `string`, `string`, `boolean`, `string`, `ISO-8601` | Logged evaluation response, grading status, and generated AI justification text. |
+| **ProgressItem** | `question_id`, `question_number`, `status`, `selected_answer`, `explanation` | `string`, `number`, `'green' \| 'red' \| 'gray'`, `string`, `string` | Computed progress state map driving the sidebar navigation sheet and score metrics. |
 
 ---
 
@@ -145,62 +112,15 @@ The interview preparation section uses a multi-stage wizard to transition studen
 
 ---
 
-## 🛡️ 5. Zero-Downtime Model Failover System ( v2.4.1 )
+## 🛡️ 5. Zero-Downtime Model Failover System
 
-To prevent study disruptions from API rate limits, daily quotas (such as the 20-request limit on free tiers), or transient service outages, the backend implements an advanced failover model shield inside `src/ai_service.ts`:
+To prevent study disruptions from API rate limits, daily quotas, or transient service outages, the backend implements an automated model redirection shield in `src/ai_service.ts`:
 
-```typescript
-// Core implementation design inside ai_service.ts
-import { GoogleGenAI } from "@google/genai";
-
-export async function generateGeminiStream(
-  prompt: string,
-  onChunk: (text: string) => void
-): Promise<string> {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  let fullText = "";
-
-  try {
-    // Attempt 1: Target primary high-intelligence model
-    const responseStream = await ai.models.generateContentStream({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-    });
-
-    for await (const chunk of responseStream) {
-      if (chunk.text) {
-        fullText += chunk.text;
-        onChunk(chunk.text);
-      }
-    }
-    return fullText;
-
-  } catch (error: any) {
-    console.warn("Primary Model Error (Redirecting to fallback):", error.message || error);
-    
-    // Attempt 2: Fallback to high-availability light model
-    try {
-      const fallbackStream = await ai.models.generateContentStream({
-        model: "gemini-3.1-flash-lite",
-        contents: prompt,
-      });
-
-      // Send a silent visual cue to client if needed, or simply streams seamlessly
-      for await (const chunk of fallbackStream) {
-        if (chunk.text) {
-          fullText += chunk.text;
-          onChunk(chunk.text);
-        }
-      }
-      return fullText;
-
-    } catch (fallbackError: any) {
-      console.error("Critical: Fallback Model failed:", fallbackError.message);
-      throw new Error("All model allocation routes exhausted. Please verify API configuration.");
-    }
-  }
-}
-```
+| Strategy Layer | Target Model | Role & Behaviour | Trigger Condition |
+| :--- | :--- | :--- | :--- |
+| **Primary Route** | `gemini-3.5-flash` | High-intelligence reasoning model for syllabus generation, SSE answer evaluation, and deep tutor chat. | Default invocation target. |
+| **Failover Shield** | `gemini-3.1-flash-lite` | High-availability lightweight fallback model providing real-time streaming response continuity. | Automatically intercepted when Primary encounters `429 Rate Limit`, quota exhaustion, or socket timeout errors. |
+| **Error Guard** | System Notification | Emits a structured error event to client UI if all allocation routes fail. | Both Primary and Fallback model endpoints return non-recoverable errors. |
 
 ---
 
@@ -216,30 +136,12 @@ Instead of locking students into static roadmap chapters, the Bento Board provid
 
 ## 🎨 7. Unified Theme State Synchronization
 
-To prevent discordant visual layouts, PrepMaster enforces a single global theme state synchronized through a centralized layout pattern.
+To prevent discordant visual layouts, PrepMaster enforces a single global theme state synchronized across all sub-apps.
 
-### A. Core State Setup
-```typescript
-// App.tsx
-const [isDark, setIsDark] = useState<boolean>(() => {
-  const cached = localStorage.getItem('interview_theme');
-  if (cached) return cached === 'dark';
-  // Fallback to media query
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
-});
-
-useEffect(() => {
-  localStorage.setItem('interview_theme', isDark ? 'dark' : 'light');
-}, [isDark]);
-```
-
-### B. Synchronized Context Propagation
-*   The `isDark` variable and its toggler are passed down to all active components (`PracticeSession` and `InterviewPrep`).
-*   Tailwind utility styles resolve lookups natively using conditional templates:
-    ```tsx
-    <div className={`p-6 rounded-2xl ${isDark ? 'bg-slate-900 text-slate-100 border-slate-800' : 'bg-white text-slate-800 border-slate-200'}`}>
-    ```
-*   This ensures zero visual flicker and perfectly coordinates code blocks, modals, and charts.
+*   **Storage Key**: `interview_theme` in `localStorage` (`'dark'` or `'light'`).
+*   **Default Detection**: Resolves stored preference first, falling back to system OS `prefers-color-scheme`.
+*   **Context Propagation**: Passed down from `App.tsx` to active views (`PracticeSession` and `InterviewPrep`).
+*   **Visual Application**: Drives conditional Tailwind utility classes (`bg-slate-900` vs `bg-white`) to eliminate layout flickers across modals, code blocks, and charts.
 
 ---
 
